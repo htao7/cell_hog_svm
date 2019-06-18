@@ -20,12 +20,12 @@ def Training(model):
         hog_list.extend(hog_list_i)
     label_list = np.array(label_list)
     hog_list = np.array(hog_list)
+    #print(hog_list,len(hog_list))
     Train_svm(label_list, hog_list,model)
     return
 
 def Read_label(i):
     img = cv2.imread('./training/' + str(i) + '.tif',0)
-    img = cv2.GaussianBlur(img,(3,3),0)
     labelfile = open('./training/' + str(i) + '.txt','r')
     box_list = []
     for line in labelfile:
@@ -60,42 +60,38 @@ def Calc_hog(i):
         img_box_resized = cv2.resize(img_box,(64,64),interpolation=cv2.INTER_AREA)
         #cv2.imshow('box', img_box_resized)
         #cv2.waitKey(0)
-        if box.label == 0:
-            enhance1 = cv2.flip(img_box_resized, 0)
-            enhance2 = cv2.flip(img_box_resized, 1)
-            enhance3 = cv2.flip(img_box_resized, -1)
-            hist1 = hog.compute(enhance1)
-            hist2 = hog.compute(enhance2)
-            hist3 = hog.compute(enhance3)
+        if box.label != -1:
+            label_list_e,hog_list_e = Enhance_label(box.label,img_box_resized,hog)
+            label_list.extend(label_list_e)
+            hog_list.extend(hog_list_e)
+        else:
+            hist = hog.compute(img_box_resized)
             label_list.append(-1)
-            hog_list.append(hist1)
-            label_list.append(-1)
-            hog_list.append(hist2)
-            label_list.append(-1)
-            hog_list.append(hist3)
-            box.label = -1
-
-        if box.label == 1:
-            enhance1 = cv2.flip(img_box_resized,0)
-            enhance2 = cv2.flip(img_box_resized,1)
-            enhance3 = cv2.flip(img_box_resized,-1)
-            hist1 = hog.compute(enhance1)
-            hist2 = hog.compute(enhance2)
-            hist3 = hog.compute(enhance3)
-            label_list.append(1)
-            hog_list.append(hist1)
-            label_list.append(1)
-            hog_list.append(hist2)
-            label_list.append(1)
-            hog_list.append(hist3)
-
-        hist = hog.compute(img_box_resized)
-        label_list.append(box.label)
-        hog_list.append(hist)
+            hog_list.append(hist)
 
     label_list = np.array(label_list)
     hog_list = np.array(hog_list)
     return (label_list,hog_list)
+
+def Enhance_label(label,img_box_resized,hog):
+    label_list_e = []
+    hog_list_e = []
+    hist = hog.compute(img_box_resized)
+    enhance1 = cv2.flip(img_box_resized, 0)
+    enhance2 = cv2.flip(img_box_resized, 1)
+    enhance3 = cv2.flip(img_box_resized, -1)
+    hist1 = hog.compute(enhance1)
+    hist2 = hog.compute(enhance2)
+    hist3 = hog.compute(enhance3)
+    hog_list_e.extend([hist1,hist2,hist3,hist])
+    if label == 0:
+        label_list_e.extend([-1, -1, -1, -1])
+    else:
+        label_list_e.extend([1, 1, 1, 1])
+    label_list_e = np.array(label_list_e)
+    hog_list_e = np.array(hog_list_e)
+    return (label_list_e,hog_list_e)
+
 
 
 def Create_neglabel(i,num):
@@ -109,8 +105,10 @@ def Create_neglabel(i,num):
     for j in range(num):
         x = random()
         y = random()
-        w = random() * min(2 * x,2 * (1 - x)) * 0.5
-        h = random() * min(2 * y,2 * (1 - y)) * 0.5
+        w = random() * min(2 * x,2 * (1 - x))
+        h = random() * min(2 * y,2 * (1 - y))
+        w = min(w,h)
+        h = min(w,h)
         labelfile.write("-1 %f %f %f %f\n" % (x,y,w,h))
     labelfile.write('E')
     labelfile.close()
@@ -120,7 +118,7 @@ def Train_svm(label_list,hog_list,model):
     svm = cv2.ml.SVM_create()
     svm.setType(cv2.ml.SVM_EPS_SVR)
     svm.setKernel(cv2.ml.SVM_LINEAR)
-    svm.setC(10)
+    svm.setC(1)
     svm.setP(0.1)
     svm.setNu(0.5)
     svm.train(hog_list,cv2.ml.ROW_SAMPLE,label_list)
@@ -136,19 +134,19 @@ def Load_svm(model):
     hog.setSVMDetector(sv)
     return (hog)
 
-def Detect(img,hog):
+def Detect_cell(img,hog):
     (boundingbox, weight) = hog.detectMultiScale(img,winStride=(4,4),padding=(4,4),scale=1.1,finalThreshold=0)
     #print (max(weight),min(weight))
     boundingbox = boundingbox.tolist()
     weight = weight.ravel().tolist()
-    nms_index = cv2.dnn.NMSBoxes(boundingbox,weight,1,0.1)
+    nms_index = cv2.dnn.NMSBoxes(boundingbox,weight,1,0.05)
     detected_box_list = []
     img_h,img_w = img.shape
     #print (nms_index)
     if len(nms_index) != 0:
         for i,index in enumerate(nms_index.flatten()):
             (x,y,w,h) = boundingbox[index]
-            cv2.rectangle(img,(x,y),(x + w,y + h),(0, 0, 255),2)
+            cv2.rectangle(img,(x,y),(x + w,y + h),255,2)
             cv2.putText(img, str(i), (x,y), cv2.FONT_HERSHEY_SIMPLEX, 2, 255, 2, cv2.LINE_AA)
             detected_box_list.append(Box(0,(x + w / 2) / img_w, (y + h / 2) / img_h, w / img_w / 1.1, h / img_h / 1.1))
     return (img,detected_box_list)
@@ -160,7 +158,7 @@ if __name__ == '__main__':
     img2 = cv2.imread('1.tif',0)
     img2 = cv2.GaussianBlur(img2,(5,5),0)
     hog = Load_svm("Ellie.yml")
-    img_detected,detected_box_list = Detect(img2,hog)
+    img_detected,detected_box_list = Detect_cell(img2,hog)
     r,c = img_detected.shape
     cv2.namedWindow('img',cv2.WINDOW_NORMAL)
     cv2.imshow('img',img_detected)

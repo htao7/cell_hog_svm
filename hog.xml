@@ -11,7 +11,7 @@
     8 8</cellSize>
   <nbins>9</nbins>
   <derivAperture>1</derivAperture>
-  <winSigma>4.</winSigma>
+  <winSigma>3</winSigma>
   <histogramNormType>0</histogramNormType>
   <L2HysThreshold>2.0000000000000001e-01</L2HysThreshold>
   <gammaCorrection>1</gammaCorrection>
